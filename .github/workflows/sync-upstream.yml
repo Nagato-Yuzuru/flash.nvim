@@ -1,0 +1,57 @@
+name: sync-upstream
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [main, fix/motion-in-blink]
+    env:
+      UPSTREAM_URL: https://github.com/folke/flash.nvim.git
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ matrix.branch }}
+
+      - name: Setup git + upstream
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch upstream main
+
+      - name: Rebase onto upstream/main
+        id: rebase
+        env:
+          BRANCH: ${{ matrix.branch }}
+        run: |
+          if git rebase upstream/main; then
+            git push --force-with-lease origin "$BRANCH"
+            echo "result=ok" >> "$GITHUB_OUTPUT"
+          else
+            git rebase --abort
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Open issue on conflict
+        if: failure() && steps.rebase.outputs.result == 'conflict'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ matrix.branch }}
+        run: |
+          gh issue create \
+            --title "sync-upstream: rebase conflict on $BRANCH" \
+            --body "Daily sync hit a conflict rebasing \`$BRANCH\` onto upstream/main. Resolve manually." \
+            --label "auto-sync" || true
