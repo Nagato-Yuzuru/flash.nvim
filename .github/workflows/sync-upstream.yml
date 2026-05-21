@@ -16,7 +16,7 @@ jobs:
       PATCH_BRANCH: fix/motion-in-blink
       UPSTREAM_URL: https://github.com/folke/flash.nvim.git
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
